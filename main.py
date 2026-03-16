@@ -1,6 +1,6 @@
 """
 GPlan IA 4.0 — Enterprise Edition (Gemini 2.5 Flash)
-Gantt corrigido com parsing robusto de datas + Ícone Profissional SVG
+Gantt com parsing de datas reforçado + Botões de Ação 100% Funcionais
 """
 
 import streamlit as st
@@ -12,73 +12,24 @@ import google.generativeai as genai
 import warnings
 warnings.filterwarnings("ignore")
 
-st.set_page_config(
-    page_title="GPlan IA 4.0",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="GPlan IA 4.0", page_icon="📊", layout="wide")
 
-# ====================== VISUAL PREMIUM ======================
+# Estilo minimalista premium (igual anterior)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    
-    html, body, [data-testid="stAppViewContainer"] {
-        background: #0a0f1c;
-        color: #e2e8f0;
-        font-family: 'Inter', sans-serif;
-    }
-    
-    [data-testid="stSidebar"] {
-        background: #111827;
-        border-right: 1px solid #1f2937;
-    }
-    
-    h1, h2, h3 { font-weight: 700; color: #60a5fa; margin: 0.5rem 0; }
-    
-    .stMetric {
-        background: #1f2937;
-        border-radius: 16px;
-        padding: 1.5rem;
-        border: 1px solid #334155;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-    }
-    
-    .stButton > button {
-        width: 100%;
-        background: linear-gradient(135deg, #1e40af, #3b82f6);
-        border: none;
-        border-radius: 12px;
-        font-weight: 600;
-        padding: 14px;
-        margin: 10px 0;
-        transition: all 0.3s;
-    }
-    
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 30px rgba(59,130,246,0.4);
-    }
-    
-    .header-svg {
-        width: 80px;
-        height: 80px;
-        margin: 1rem auto 0.5rem;
-        display: block;
-    }
-    
-    [data-testid="stChatMessage"] {
-        background: #1f2937 !important;
-        border: 1px solid #334155;
-        border-radius: 16px;
-        padding: 1.2rem;
-        margin: 1rem 0;
-    }
+    html, body, [data-testid="stAppViewContainer"] { background: #0a0f1c; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+    [data-testid="stSidebar"] { background: #111827; border-right: 1px solid #1f2937; }
+    h1, h2, h3 { font-weight: 700; color: #60a5fa; }
+    .stMetric { background: #1f2937; border-radius: 16px; padding: 1.5rem; border: 1px solid #334155; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+    .stButton > button { width: 100%; background: linear-gradient(135deg, #1e40af, #3b82f6); border: none; border-radius: 12px; font-weight: 600; padding: 14px; margin: 10px 0; transition: all 0.3s; }
+    .stButton > button:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(59,130,246,0.4); }
+    .header-svg { width: 80px; height: 80px; margin: 1rem auto 0.5rem; display: block; }
+    [data-testid="stChatMessage"] { background: #1f2937 !important; border: 1px solid #334155; border-radius: 16px; padding: 1.2rem; margin: 1rem 0; }
 </style>
 """, unsafe_allow_html=True)
 
-# Ícone SVG profissional tech (cérebro abstrato + circuito, sem carinha)
+# Ícone SVG profissional tech (cérebro abstrato)
 PROFESSIONAL_ICON_SVG = """
 <svg class="header-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -94,16 +45,13 @@ PROFESSIONAL_ICON_SVG = """
 </svg>
 """
 
-# ====================== GEMINI ======================
+# Gemini
 @st.cache_resource
 def init_gemini():
     api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key: return None
     genai.configure(api_key=api_key)
-    return genai.GenerativeModel(
-        model_name='gemini-2.5-flash',
-        system_instruction="Você é GPlan IA 4.0, assistente sênior de projetos. Responda em PT-BR profissional, detalhado, com tabelas e insights acionáveis."
-    )
+    return genai.GenerativeModel(model_name='gemini-2.5-flash', system_instruction="Você é GPlan IA 4.0, assistente sênior de projetos. Responda em PT-BR profissional, detalhado, com tabelas e insights acionáveis.")
 
 gemini_model = init_gemini()
 
@@ -137,58 +85,44 @@ def gerar_gantt(df, col_map):
     end_col = col_map.get('fim')
     
     if start_col not in df.columns or end_col not in df.columns:
-        st.warning("Colunas de início ou fim não encontradas no mapeamento.")
+        st.warning("Colunas de início ou fim não encontradas.")
         return None
     
     dfg = df.copy()
     
-    # Tentativa 1: parsing automático com dayfirst (prioridade BR)
-    dfg['Start'] = pd.to_datetime(dfg[start_col], errors='coerce', dayfirst=True)
-    dfg['Finish'] = pd.to_datetime(dfg[end_col], errors='coerce', dayfirst=True)
+    # Parsing reforçado
+    for col, new_col in [(start_col, 'Start'), (end_col, 'Finish')]:
+        s = dfg[col].astype(str).str.strip()
+        # Tenta vários formatos
+        dfg[new_col] = pd.to_datetime(s, errors='coerce', dayfirst=True)
+        mask = dfg[new_col].isna()
+        if mask.any():
+            dfg.loc[mask, new_col] = pd.to_datetime(s[mask], format='%d/%m/%Y', errors='coerce')
+        mask = dfg[new_col].isna()
+        if mask.any():
+            dfg.loc[mask, new_col] = pd.to_datetime(s[mask], format='%d-%m-%Y', errors='coerce')
+        mask = dfg[new_col].isna()
+        if mask.any():
+            dfg.loc[mask, new_col] = pd.to_datetime(s[mask], format='%m/%d/%Y', errors='coerce')
+        mask = dfg[new_col].isna()
+        if mask.any():
+            dfg.loc[mask, new_col] = pd.to_datetime(s[mask], format='%Y-%m-%d', errors='coerce')
     
-    # Tentativa 2: format explícito dd/mm/yyyy
-    mask_start_invalid = dfg['Start'].isna()
-    mask_end_invalid = dfg['Finish'].isna()
-    if mask_start_invalid.any():
-        dfg.loc[mask_start_invalid, 'Start'] = pd.to_datetime(dfg.loc[mask_start_invalid, start_col], format='%d/%m/%Y', errors='coerce')
-    if mask_end_invalid.any():
-        dfg.loc[mask_end_invalid, 'Finish'] = pd.to_datetime(dfg.loc[mask_end_invalid, end_col], format='%d/%m/%Y', errors='coerce')
-    
-    # Tentativa 3: formato americano m/d/y (fallback)
-    mask_start_invalid = dfg['Start'].isna()
-    mask_end_invalid = dfg['Finish'].isna()
-    if mask_start_invalid.any():
-        dfg.loc[mask_start_invalid, 'Start'] = pd.to_datetime(dfg.loc[mask_start_invalid, start_col], format='%m/%d/%Y', errors='coerce')
-    if mask_end_invalid.any():
-        dfg.loc[mask_end_invalid, 'Finish'] = pd.to_datetime(dfg.loc[mask_end_invalid, end_col], format='%m/%d/%Y', errors='coerce')
-    
-    # Remove linhas sem datas válidas
     dfg = dfg.dropna(subset=['Start', 'Finish'])
     
     if dfg.empty:
-        st.warning("""
-        Nenhuma data válida encontrada nas colunas selecionadas.
-        Verifique:
-        • Formato deve ser dd/mm/aaaa (ex: 15/06/2025) ou mm/dd/yyyy
-        • Sem textos como 'Pendente', 'N/A' ou células vazias nessas colunas
-        • Selecione novamente as colunas corretas no mapeamento
-        """)
+        st.warning("Nenhuma data válida nas colunas escolhidas.")
+        # Mostra amostra para debug
+        st.info(f"Exemplo das colunas selecionadas (primeiras 5 linhas):\nInício: {df[start_col].head().tolist()}\nFim: {df[end_col].head().tolist()}")
         return None
     
     fig = px.timeline(dfg, x_start="Start", x_end="Finish", y=col_map['tarefa'],
                       color=col_map.get('status'), hover_data=[col_map.get('responsavel')])
-    fig.update_layout(
-        template="plotly_dark",
-        height=520,
-        margin=dict(l=0,r=0,t=30,b=0),
-        xaxis_title="Período",
-        yaxis_title="Tarefas"
-    )
+    fig.update_layout(template="plotly_dark", height=520, margin=dict(l=0,r=0,t=30,b=0))
     return fig
 
 def gerar_dashboard(df, col_map):
     if df is None or df.empty: return
-    
     cp = calcular_caminho_critico(df, col_map)
     atrasadas = len(df[df[col_map['status']].astype(str).str.contains("atrasado|late|pendente", case=False, na=False)])
     total = len(df)
@@ -231,15 +165,15 @@ with st.sidebar:
             
             cols = list(df.columns)
             st.session_state.column_map = {
-                'tarefa': st.selectbox("Tarefa", cols, index=next((i for i,c in enumerate(cols) if 'tarefa' in c.lower() or 'nome' in c.lower() or 'atividade' in c.lower()), 0)),
-                'inicio': st.selectbox("Início", cols, index=next((i for i,c in enumerate(cols) if 'início' in c.lower() or 'inicio' in c.lower() or 'start' in c.lower() or 'data início' in c.lower()), 0)),
-                'fim': st.selectbox("Fim", cols, index=next((i for i,c in enumerate(cols) if 'fim' in c.lower() or 'end' in c.lower() or 'término' in c.lower() or 'data fim' in c.lower()), 0)),
-                'status': st.selectbox("Status", cols, index=next((i for i,c in enumerate(cols) if 'status' in c.lower() or 'situação' in c.lower() or 'estado' in c.lower()), 0)),
-                'responsavel': st.selectbox("Responsável", cols, index=next((i for i,c in enumerate(cols) if 'respons' in c.lower() or 'dono' in c.lower() or 'owner' in c.lower()), 0)),
+                'tarefa': st.selectbox("Tarefa", cols, index=next((i for i,c in enumerate(cols) if 'tarefa' in c.lower() or 'nome' in c.lower()), 0)),
+                'inicio': st.selectbox("Início", cols, index=next((i for i,c in enumerate(cols) if 'início' in c.lower() or 'inicio' in c.lower() or 'start' in c.lower()), 0)),
+                'fim': st.selectbox("Fim", cols, index=next((i for i,c in enumerate(cols) if 'fim' in c.lower() or 'end' in c.lower()), 0)),
+                'status': st.selectbox("Status", cols, index=next((i for i,c in enumerate(cols) if 'status' in c.lower()), 0)),
+                'responsavel': st.selectbox("Responsável", cols, index=next((i for i,c in enumerate(cols) if 'respons' in c.lower()), 0)),
                 'predecessores': st.selectbox("Predecessores", [""] + cols),
             }
         except Exception as e:
-            st.error(f"Erro ao ler arquivo: {e}")
+            st.error(f"Erro ao ler: {e}")
     
     if st.session_state.df is not None:
         st.markdown("### Ações Rápidas")
