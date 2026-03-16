@@ -1,7 +1,6 @@
 """
 GPlan IA 4.0 — Enterprise Edition (Gemini 2.5 Flash)
-Corrigido DateParseError no Gantt + Tratamento robusto de datas
-Design Premium Minimalista + BI Automático + Botões Funcionais
+Corrigido Gantt (DateParseError) + Ícone Profissional SVG + Botões Funcionais
 """
 
 import streamlit as st
@@ -20,7 +19,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ====================== VISUAL PREMIUM ======================
+# ====================== VISUAL PREMIUM MINIMALISTA ======================
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -36,7 +35,7 @@ st.markdown("""
         border-right: 1px solid #1f2937;
     }
     
-    h1, h2, h3 { font-weight: 700; color: #60a5fa; }
+    h1, h2, h3 { font-weight: 700; color: #60a5fa; margin: 0.5rem 0; }
     
     .stMetric {
         background: #1f2937;
@@ -65,7 +64,7 @@ st.markdown("""
     .header-svg {
         width: 80px;
         height: 80px;
-        margin: 1rem auto;
+        margin: 1rem auto 0.5rem;
         display: block;
     }
     
@@ -74,12 +73,13 @@ st.markdown("""
         border: 1px solid #334155;
         border-radius: 16px;
         padding: 1.2rem;
+        margin: 1rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Ícone SVG profissional (estilo Grok-like, cérebro abstrato azul)
-GROK_ICON_SVG = """
+# Ícone SVG profissional (cérebro + circuito abstrato tech, estilo corporativo)
+PROFESSIONAL_ICON_SVG = """
 <svg class="header-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -87,11 +87,13 @@ GROK_ICON_SVG = """
       <stop offset="100%" stop-color="#3b82f6"/>
     </linearGradient>
   </defs>
-  <circle cx="50" cy="50" r="42" fill="none" stroke="url(#grad)" stroke-width="6"/>
-  <circle cx="38" cy="42" r="6" fill="#60a5fa"/>
-  <circle cx="62" cy="42" r="6" fill="#60a5fa"/>
-  <path d="M30 55 Q50 70 70 55 M35 60 Q50 80 65 60" stroke="#60a5fa" stroke-width="5" fill="none" opacity="0.7"/>
-  <path d="M40 65 Q50 50 60 65" stroke="#3b82f6" stroke-width="4" fill="none"/>
+  <!-- Estrutura principal (círculo tech) -->
+  <circle cx="50" cy="50" r="38" fill="none" stroke="url(#grad)" stroke-width="5"/>
+  <!-- Linhas de circuito/cérebro abstrato -->
+  <path d="M35 40 Q50 25 65 40 M35 60 Q50 75 65 60" stroke="url(#grad)" stroke-width="4" fill="none"/>
+  <path d="M30 50 Q50 40 70 50 Q50 60 30 50" stroke="#60a5fa" stroke-width="3" fill="none" opacity="0.8"/>
+  <!-- Ponto central (foco/olho abstrato) -->
+  <circle cx="50" cy="50" r="8" fill="#1f2937" stroke="#60a5fa" stroke-width="2"/>
 </svg>
 """
 
@@ -133,38 +135,43 @@ def calcular_caminho_critico(df, col_map):
 
 def gerar_gantt(df, col_map):
     if df is None or df.empty: return None
-    try:
-        # Tratamento robusto de datas
-        start_col = col_map.get('inicio')
-        end_col = col_map.get('fim')
-        
-        if start_col not in df.columns or end_col not in df.columns:
-            return None
-        
-        dfg = df.copy()
-        dfg['Start'] = pd.to_datetime(dfg[start_col], errors='coerce', dayfirst=True)
-        dfg['Finish'] = pd.to_datetime(dfg[end_col], errors='coerce', dayfirst=True)
-        
-        # Remove linhas sem datas válidas
-        dfg = dfg.dropna(subset=['Start', 'Finish'])
-        
-        if dfg.empty:
-            st.warning("Nenhuma data válida encontrada nas colunas de início/fim.")
-            return None
-        
-        fig = px.timeline(dfg, x_start="Start", x_end="Finish", y=col_map['tarefa'],
-                          color=col_map.get('status'), hover_data=[col_map.get('responsavel')])
-        fig.update_layout(
-            template="plotly_dark",
-            height=520,
-            margin=dict(l=0,r=0,t=30,b=0),
-            xaxis_title="Período",
-            yaxis_title="Tarefas"
-        )
-        return fig
-    except Exception as e:
-        st.warning(f"Gantt não gerado: {str(e)}")
+    
+    start_col = col_map.get('inicio')
+    end_col = col_map.get('fim')
+    
+    if start_col not in df.columns or end_col not in df.columns:
+        st.warning("Colunas de início/fim não encontradas no mapeamento.")
         return None
+    
+    dfg = df.copy()
+    
+    # Tratamento robusto: tenta vários formatos comuns (BR e US)
+    dfg['Start'] = pd.to_datetime(dfg[start_col], errors='coerce', dayfirst=True)
+    dfg['Finish'] = pd.to_datetime(dfg[end_col], errors='coerce', dayfirst=True)
+    
+    # Se ainda falhar, tenta format explícito (ex: dd/mm/yyyy)
+    if dfg['Start'].isna().all():
+        dfg['Start'] = pd.to_datetime(dfg[start_col], format='%d/%m/%Y', errors='coerce')
+    if dfg['Finish'].isna().all():
+        dfg['Finish'] = pd.to_datetime(dfg[end_col], format='%d/%m/%Y', errors='coerce')
+    
+    # Remove linhas inválidas
+    dfg = dfg.dropna(subset=['Start', 'Finish'])
+    
+    if dfg.empty:
+        st.warning("Nenhuma data válida encontrada nas colunas selecionadas para início e fim.")
+        return None
+    
+    fig = px.timeline(dfg, x_start="Start", x_end="Finish", y=col_map['tarefa'],
+                      color=col_map.get('status'), hover_data=[col_map.get('responsavel')])
+    fig.update_layout(
+        template="plotly_dark",
+        height=520,
+        margin=dict(l=0,r=0,t=30,b=0),
+        xaxis_title="Período",
+        yaxis_title="Tarefas"
+    )
+    return fig
 
 def gerar_dashboard(df, col_map):
     if df is None or df.empty: return
@@ -187,7 +194,7 @@ def gerar_dashboard(df, col_map):
         if fig:
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Gantt não disponível (verifique colunas de datas)")
+            st.info("Gantt não gerado (verifique se as colunas de datas estão corretas e têm formato válido como dd/mm/aaaa)")
     
     with c2:
         st.subheader("Distribuição de Status")
@@ -198,8 +205,8 @@ def gerar_dashboard(df, col_map):
 
 # SIDEBAR
 with st.sidebar:
-    st.markdown(GROK_ICON_SVG, unsafe_allow_html=True)
-    st.markdown("<h2 style='text-align:center;'>GPlan IA</h2>", unsafe_allow_html=True)
+    st.markdown(PROFESSIONAL_ICON_SVG, unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align:center; margin-top:-10px;'>GPlan IA</h2>", unsafe_allow_html=True)
     
     uploaded = st.file_uploader("Cronograma", type=["xlsx","csv"])
     
@@ -211,20 +218,20 @@ with st.sidebar:
             
             cols = list(df.columns)
             st.session_state.column_map = {
-                'tarefa': st.selectbox("Tarefa", cols, index=next((i for i,c in enumerate(cols) if 'tarefa' in c.lower()), 0)),
-                'inicio': st.selectbox("Início", cols, index=next((i for i,c in enumerate(cols) if 'início' in c.lower() or 'start' in c.lower()), 0)),
-                'fim': st.selectbox("Fim", cols, index=next((i for i,c in enumerate(cols) if 'fim' in c.lower() or 'end' in c.lower()), 0)),
-                'status': st.selectbox("Status", cols, index=next((i for i,c in enumerate(cols) if 'status' in c.lower()), 0)),
-                'responsavel': st.selectbox("Responsável", cols, index=next((i for i,c in enumerate(cols) if 'respons' in c.lower()), 0)),
+                'tarefa': st.selectbox("Tarefa", cols, index=next((i for i,c in enumerate(cols) if 'tarefa' in c.lower() or 'nome' in c.lower() or 'atividade' in c.lower()), 0)),
+                'inicio': st.selectbox("Início", cols, index=next((i for i,c in enumerate(cols) if 'início' in c.lower() or 'inicio' in c.lower() or 'start' in c.lower() or 'data início' in c.lower()), 0)),
+                'fim': st.selectbox("Fim", cols, index=next((i for i,c in enumerate(cols) if 'fim' in c.lower() or 'end' in c.lower() or 'término' in c.lower() or 'data fim' in c.lower()), 0)),
+                'status': st.selectbox("Status", cols, index=next((i for i,c in enumerate(cols) if 'status' in c.lower() or 'situação' in c.lower() or 'estado' in c.lower()), 0)),
+                'responsavel': st.selectbox("Responsável", cols, index=next((i for i,c in enumerate(cols) if 'respons' in c.lower() or 'dono' in c.lower() or 'owner' in c.lower()), 0)),
                 'predecessores': st.selectbox("Predecessores", [""] + cols),
             }
         except Exception as e:
-            st.error(f"Erro ao ler: {e}")
+            st.error(f"Erro ao ler arquivo: {e}")
     
     if st.session_state.df is not None:
         st.markdown("### Ações Rápidas")
         if st.button("Análise de Riscos"):
-            st.session_state.messages.append({"role": "user", "content": "Faça análise completa de riscos do projeto atual, incluindo tarefas críticas e recomendações."})
+            st.session_state.messages.append({"role": "user", "content": "Faça análise completa de riscos do projeto atual."})
             st.rerun()
         if st.button("Relatório Métricas"):
             st.session_state.messages.append({"role": "user", "content": "Gere relatório de métricas, saúde e caminho crítico."})
@@ -237,7 +244,7 @@ with st.sidebar:
             st.rerun()
 
 # MAIN
-st.markdown('<div style="text-align:center;">' + GROK_ICON_SVG + '<h1>GPlan IA 4.0</h1></div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align:center;">' + PROFESSIONAL_ICON_SVG + '<h1>GPlan IA 4.0</h1></div>', unsafe_allow_html=True)
 
 if st.session_state.df is not None:
     gerar_dashboard(st.session_state.df, st.session_state.column_map)
