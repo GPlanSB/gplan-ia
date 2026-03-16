@@ -1,142 +1,235 @@
 """
-GPlan IA 4.0 — Enterprise Edition (com Google Gemini API gratuita)
-Atualizado março 2026: modelo corrigido para gemini-2.5-flash
+GPlan IA 4.0 — Enterprise Edition (Gemini 2.5 Flash)
+Versão Premium Modern + Minimalista + BI Automático
 """
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import json
-from datetime import datetime
 import networkx as nx
 import google.generativeai as genai
 import warnings
 warnings.filterwarnings("ignore")
 
-st.set_page_config(page_title="GPlan IA 4.0 Enterprise - Gemini", page_icon="🧠", layout="wide")
+st.set_page_config(
+    page_title="GPlan IA 4.0",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Tema
+# ====================== VISUAL MODERNO MINIMALISTA ======================
 st.markdown("""
 <style>
-    [data-testid="stAppViewContainer"] { background: #0f172a; color: #e2e8f0; }
-    .stButton > button { background: linear-gradient(135deg, #00d9ff, #7c3aed); color: white; border: none; }
-    h1, h2, h3 { color: #00d9ff; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    html, body, [data-testid="stAppViewContainer"] {
+        background: #0a0f1c;
+        color: #e2e8f0;
+        font-family: 'Inter', sans-serif;
+    }
+    
+    .stApp {
+        background: #0a0f1c;
+    }
+    
+    [data-testid="stSidebar"] {
+        background: #111827;
+        border-right: 1px solid #1f2937;
+    }
+    
+    h1, h2, h3, h4 {
+        font-weight: 700;
+        color: #60a5fa;
+    }
+    
+    .stMetric {
+        background: #1f2937;
+        border-radius: 16px;
+        padding: 20px;
+        border: 1px solid #334155;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    
+    .card {
+        background: #1f2937;
+        border-radius: 16px;
+        padding: 24px;
+        border: 1px solid #334155;
+    }
+    
+    .stButton > button {
+        background: linear-gradient(90deg, #3b82f6, #60a5fa);
+        border: none;
+        border-radius: 12px;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 30px rgba(59, 130, 246, 0.4);
+    }
+    
+    .chat-message {
+        border-radius: 16px;
+        padding: 16px 20px;
+        margin: 12px 0;
+    }
+    
+    [data-testid="stChatMessage"] {
+        background: #1f2937 !important;
+        border: 1px solid #334155;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Gemini init - MODELO ATUALIZADO
+# ====================== GEMINI INIT ======================
 @st.cache_resource
 def init_gemini():
     try:
         api_key = st.secrets.get("GEMINI_API_KEY")
         if not api_key:
-            raise ValueError("GEMINI_API_KEY não encontrada nos secrets")
+            st.error("Configure GEMINI_API_KEY nos Secrets")
+            return None
         genai.configure(api_key=api_key)
-        
         return genai.GenerativeModel(
-            model_name='gemini-2.5-flash',  # ← Correção aqui! (ou 'gemini-2.5-flash-lite')
-            system_instruction="""Você é o GPlan IA 4.0, assistente sênior de gestão de projetos.
-Sempre responda em português brasileiro correto e profissional.
-Seja detalhado, use tabelas Markdown para métricas/riscos/planos 5W2H, listas e estrutura clara.
-Nunca respostas curtas ou repetitivas. Forneça insights acionáveis baseados em PMBOK/Scrum/Kanban."""
+            model_name='gemini-2.5-flash',
+            system_instruction="""Você é o GPlan IA 4.0, assistente sênior de gestão de projetos. 
+Responda sempre em português brasileiro impecável, profissional e detalhado. 
+Use tabelas Markdown e listas claras. Foque em PMBOK, Scrum e melhores práticas."""
         )
-    except Exception as e:
-        st.error(f"Erro ao inicializar Gemini: {str(e)}\nVerifique a chave API nos secrets e se o modelo está disponível na sua região.")
+    except:
         return None
 
 gemini_model = init_gemini()
 
-# Estado da sessão
+# ====================== ESTADO ======================
 if "df" not in st.session_state: st.session_state.df = None
-if "project_name" not in st.session_state: st.session_state.project_name = "Projeto Sem Nome"
+if "project_name" not in st.session_state: st.session_state.project_name = "Novo Projeto"
 if "column_map" not in st.session_state: st.session_state.column_map = {}
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "🧠 Bem-vindo ao GPlan IA 4.0 (Gemini 2.5 Flash)\nFaça upload do cronograma e pergunte qualquer coisa sobre riscos, caminho crítico, métricas etc."}]
+    st.session_state.messages = []
 
-# Funções (mantidas, com robustez)
+# ====================== FUNÇÕES ======================
 def calcular_caminho_critico(df, col_map):
     if df is None or df.empty: return {"caminho": [], "folga": {}}
     G = nx.DiGraph()
     for _, row in df.iterrows():
-        tarefa = str(row.get(col_map.get('tarefa', ''), 'Sem nome'))
-        dur = max(1, int(row.get('duracao', row.get('duração', 5))))
-        G.add_node(tarefa, duration=dur)
-        preds = str(row.get(col_map.get('predecessores', ''), '')).strip()
-        if preds:
-            for p in [x.strip() for x in preds.split(',') if x.strip()]:
-                if p in df[col_map.get('tarefa', 'Tarefa')].astype(str).values:
-                    G.add_edge(p, tarefa)
+        tarefa = str(row.get(col_map.get('tarefa'), 'Sem nome'))
+        G.add_node(tarefa)
+        preds = str(row.get(col_map.get('predecessores', ''), '')).split(',')
+        for p in [x.strip() for x in preds if x.strip()]:
+            if p in df[col_map.get('tarefa')].astype(str).values:
+                G.add_edge(p, tarefa)
     try:
         caminho = nx.dag_longest_path(G)
-        return {"caminho": caminho, "folga": {n: 0 if n in caminho else 2 for n in G}}
+        return {"caminho": caminho}
     except:
-        return {"caminho": [], "folga": {}}
+        return {"caminho": []}
 
 def gerar_gantt(df, col_map):
-    if df is None or df.empty: return None
     try:
-        df_g = df.copy()
-        df_g['Start'] = pd.to_datetime(df_g[col_map['inicio']], errors='coerce')
-        df_g['Finish'] = pd.to_datetime(df_g[col_map['fim']], errors='coerce')
-        df_g = df_g.dropna(subset=['Start', 'Finish'])
-        if df_g.empty: return None
-        fig = px.timeline(df_g, x_start="Start", x_end="Finish", y=col_map['tarefa'],
+        dfg = df.copy()
+        dfg['Start'] = pd.to_datetime(dfg[col_map['inicio']], errors='coerce')
+        dfg['Finish'] = pd.to_datetime(dfg[col_map['fim']], errors='coerce')
+        fig = px.timeline(dfg, x_start="Start", x_end="Finish", y=col_map['tarefa'],
                           color=col_map.get('status'), hover_data=[col_map.get('responsavel')])
-        fig.update_layout(template="plotly_dark", height=500, title="Diagrama de Gantt")
+        fig.update_layout(template="plotly_dark", height=520, margin=dict(l=0,r=0,t=30,b=0))
         return fig
-    except Exception as e:
-        st.warning(f"Gantt não gerado: {e}")
+    except:
         return None
 
-def gerar_contexto(df, col_map):
-    if df is None or df.empty: return "Sem dados carregados."
-    cp = calcular_caminho_critico(df, col_map)
-    atrasadas = len(df[df[col_map['status']].astype(str).str.contains(r"atrasado|atraso|late", case=False, na=False)])
-    return f"Projeto: {st.session_state.project_name}\nTotal tarefas: {len(df)}\nAtrasadas: {atrasadas}\nCaminho crítico (top 5): {', '.join(cp['caminho'][:5]) or 'N/A'}\nResumo:\n{df.head(8).to_string(index=False)}"
-
-# SIDEBAR
-with st.sidebar:
-    st.title("GPlan IA 4.0")
-    uploaded = st.file_uploader("Cronograma (Excel/CSV)", type=["xlsx", "xls", "csv"])
+def gerar_dashboard(df, col_map):
+    if df is None or df.empty: return
     
-    if uploaded is not None:
+    cp = calcular_caminho_critico(df, col_map)
+    atrasadas = len(df[df[col_map['status']].astype(str).str.contains("atrasado|late|delay", case=False, na=False)])
+    total = len(df)
+    saude = round(100 - (atrasadas / total * 100), 1) if total > 0 else 0
+    
+    # KPIs
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total de Tarefas", total, help="Quantidade total de atividades")
+    col2.metric("Caminho Crítico", len(cp['caminho']), help="Tarefas que não podem atrasar")
+    col3.metric("Tarefas Atrasadas", atrasadas, delta=f"-{atrasadas}", delta_color="inverse")
+    col4.metric("Saúde do Projeto", f"{saude}%", delta=f"{saude-80:+.1f}%")
+    
+    # Gráficos lado a lado
+    c1, c2 = st.columns([3, 2])
+    with c1:
+        st.subheader("Diagrama de Gantt")
+        fig_gantt = gerar_gantt(df, col_map)
+        if fig_gantt:
+            st.plotly_chart(fig_gantt, use_container_width=True)
+    
+    with c2:
+        st.subheader("Distribuição de Status")
+        status_counts = df[col_map['status']].value_counts()
+        fig_pie = px.pie(values=status_counts.values, names=status_counts.index, 
+                         color_discrete_sequence=px.colors.sequential.Blues_r)
+        fig_pie.update_layout(template="plotly_dark", height=380)
+        st.plotly_chart(fig_pie, use_container_width=True)
+    
+    # Carga por responsável
+    st.subheader("Carga por Responsável")
+    resp_col = col_map.get('responsavel')
+    if resp_col in df.columns:
+        carga = df[resp_col].value_counts().head(10)
+        fig_bar = px.bar(x=carga.values, y=carga.index, orientation='h',
+                         color=carga.values, color_continuous_scale="blues")
+        fig_bar.update_layout(template="plotly_dark", height=420)
+        st.plotly_chart(fig_bar, use_container_width=True)
+    
+    # Caminho crítico em lista
+    st.subheader("Caminho Crítico")
+    if cp['caminho']:
+        st.code("\n".join(cp['caminho']), language="text")
+    else:
+        st.info("Caminho crítico não detectado (verifique coluna de predecessores)")
+
+# ====================== SIDEBAR ======================
+with st.sidebar:
+    st.markdown("# GPlan IA 4.0")
+    st.caption("Gestão de Projetos • BI Automático")
+    
+    uploaded = st.file_uploader("Upload Cronograma", type=["xlsx", "xls", "csv"])
+    
+    if uploaded:
         try:
-            df = pd.read_excel(uploaded) if uploaded.name.lower().endswith(('.xlsx', '.xls')) else pd.read_csv(uploaded)
+            df = pd.read_excel(uploaded) if uploaded.name.lower().endswith(('.xlsx','.xls')) else pd.read_csv(uploaded)
             st.session_state.df = df
-            st.success("✅ Carregado!")
+            st.success("✅ Cronograma carregado")
             
             st.subheader("Mapeamento de Colunas")
             cols = list(df.columns)
-            
             st.session_state.column_map = {
-                'tarefa': st.selectbox("Tarefa/Nome", cols, index=next((i for i, c in enumerate(cols) if any(k in c.lower() for k in ['tarefa', 'nome', 'task', 'atividade'])), 0)),
-                'inicio': st.selectbox("Início", cols, index=next((i for i, c in enumerate(cols) if any(k in c.lower() for k in ['início', 'inicio', 'start', 'data início'])), 0)),
-                'fim': st.selectbox("Fim", cols, index=next((i for i, c in enumerate(cols) if any(k in c.lower() for k in ['fim', 'end', 'término', 'data fim'])), 0)),
-                'status': st.selectbox("Status", cols, index=next((i for i, c in enumerate(cols) if any(k in c.lower() for k in ['status', 'situação', 'estado'])), 0)),
-                'responsavel': st.selectbox("Responsável", cols, index=next((i for i, c in enumerate(cols) if any(k in c.lower() for k in ['respons', 'dono', 'owner', 'responsável'])), 0)),
-                'predecessores': st.selectbox("Predecessores (opc)", [""] + cols, index=0),
-                'percentual': st.selectbox("% Concluído (opc)", [""] + cols, index=0),
+                'tarefa': st.selectbox("Tarefa", cols, index=next((i for i,c in enumerate(cols) if 'tarefa' in c.lower() or 'nome' in c.lower()), 0)),
+                'inicio': st.selectbox("Data Início", cols, index=next((i for i,c in enumerate(cols) if any(k in c.lower() for k in ['início','inicio','start'])), 0)),
+                'fim': st.selectbox("Data Fim", cols, index=next((i for i,c in enumerate(cols) if any(k in c.lower() for k in ['fim','end','término'])), 0)),
+                'status': st.selectbox("Status", cols, index=next((i for i,c in enumerate(cols) if 'status' in c.lower() or 'situação' in c.lower()), 0)),
+                'responsavel': st.selectbox("Responsável", cols, index=next((i for i,c in enumerate(cols) if any(k in c.lower() for k in ['respons','dono','owner'])), 0)),
+                'predecessores': st.selectbox("Predecessores (opcional)", [""] + cols),
             }
+            st.session_state.project_name = st.text_input("Nome do Projeto", value=st.session_state.project_name)
         except Exception as e:
             st.error(f"Erro ao ler arquivo: {e}")
 
-# Dashboard
-if st.session_state.df is not None:
-    df = st.session_state.df
-    col_map = st.session_state.column_map
-    cp = calcular_caminho_critico(df, col_map)
-    
-    cols = st.columns(4)
-    cols[0].metric("Tarefas", len(df))
-    cols[1].metric("Caminho Crítico", len(cp['caminho']))
-    cols[2].metric("Atrasadas (aprox)", sum(df[col_map['status']].astype(str).str.contains(r"atrasado|late", case=False, na=False)))
-    
-    fig = gerar_gantt(df, col_map)
-    if fig:
-        st.plotly_chart(fig, use_container_width=True)
+# ====================== MAIN AREA ======================
+st.title(f"GPlan IA 4.0 — {st.session_state.project_name}")
 
-# Chat
-st.subheader("💬 Assistente Inteligente")
+if st.session_state.df is not None:
+    st.markdown("### Dashboard de Análise Automática")
+    gerar_dashboard(st.session_state.df, st.session_state.column_map)
+    
+    st.divider()
+    st.subheader("💬 Assistente Inteligente")
+else:
+    st.info("Faça upload do seu cronograma na barra lateral para ativar o BI automático e o assistente.")
+
+# Chat limpo
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
@@ -146,31 +239,23 @@ if prompt := st.chat_input("Pergunte sobre o projeto..."):
     with st.chat_message("user"):
         st.markdown(prompt)
     
-    if gemini_model is None:
-        st.error("Gemini não inicializado — verifique a chave API.")
-    else:
+    if gemini_model and st.session_state.df is not None:
         with st.chat_message("assistant"):
-            with st.spinner("Gemini analisando..."):
+            with st.spinner("Analisando com IA..."):
                 try:
                     chat = gemini_model.start_chat(history=[
-                        {"role": "user" if m["role"] == "user" else "model", "parts": [m["content"]]}
+                        {"role": "user" if m["role"]=="user" else "model", "parts": [m["content"]]} 
                         for m in st.session_state.messages[:-1]
                     ])
-                    contexto = gerar_contexto(st.session_state.df, st.session_state.column_map)
-                    response = chat.send_message(
-                        f"{contexto}\n\nPergunta: {prompt}",
-                        generation_config=genai.types.GenerationConfig(temperature=0.65, max_output_tokens=2500)
-                    )
-                    answer = response.text
+                    contexto = f"Projeto: {st.session_state.project_name}\nDados resumidos: {st.session_state.df.head(8).to_string()}"
+                    resp = chat.send_message(f"{contexto}\nPergunta: {prompt}",
+                                             generation_config=genai.types.GenerationConfig(temperature=0.7, max_output_tokens=2200))
+                    answer = resp.text
                     st.markdown(answer)
                     st.session_state.messages.append({"role": "assistant", "content": answer})
                 except Exception as e:
-                    err = str(e).lower()
-                    if "404" in err or "not found" in err:
-                        st.error("Modelo não encontrado (404). Verifique se 'gemini-2.5-flash' está disponível na sua conta/região. Tente 'gemini-2.5-flash-lite'.")
-                    elif "429" in err:
-                        st.error("Limite do free tier atingido. Espere 1-5 minutos.")
-                    else:
-                        st.error(f"Erro: {str(e)}")
+                    st.error(f"Erro: {str(e)}")
+    else:
+        st.warning("Carregue um cronograma primeiro para usar o assistente.")
 
-st.caption("GPlan IA 4.0 • Atualizado para Gemini 2.5 Flash • Free Tier • Março 2026")
+st.caption("GPlan IA 4.0 • Design Premium Minimalista • BI Automático • Gemini 2.5 Flash")
