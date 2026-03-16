@@ -1,5 +1,7 @@
 streamlit
 pandas
 plotly
-openai
+google-generativeai
 networkx
+numpy
+openpyxl  # para Excel
