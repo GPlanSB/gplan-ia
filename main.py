@@ -1,6 +1,7 @@
 """
 GPlan IA 4.0 — Enterprise Edition (Gemini 2.5 Flash)
-Versão Premium Modern + Minimalista + BI Automático
+Versão Premium Modern + Minimalista + BI Automático + Botões de Ação Rápida
+Ícone profissional personalizado (olhando para frente, estilo Grok-like)
 """
 
 import streamlit as st
@@ -66,11 +67,18 @@ st.markdown("""
         border-radius: 12px;
         font-weight: 600;
         transition: all 0.3s;
+        padding: 12px 20px;
+        margin: 8px 0;
     }
     
     .stButton > button:hover {
         transform: translateY(-2px);
         box-shadow: 0 10px 30px rgba(59, 130, 246, 0.4);
+    }
+    
+    .action-buttons .stButton > button {
+        width: 100%;
+        background: linear-gradient(135deg, #1e40af, #3b82f6);
     }
     
     .chat-message {
@@ -82,6 +90,19 @@ st.markdown("""
     [data-testid="stChatMessage"] {
         background: #1f2937 !important;
         border: 1px solid #334155;
+    }
+    
+    .header-icon {
+        font-size: 64px;
+        margin-bottom: -20px;
+        text-align: center;
+        color: #60a5fa;
+    }
+    
+    .header-title {
+        text-align: center;
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -146,18 +167,18 @@ def gerar_dashboard(df, col_map):
     if df is None or df.empty: return
     
     cp = calcular_caminho_critico(df, col_map)
-    atrasadas = len(df[df[col_map['status']].astype(str).str.contains("atrasado|late|delay", case=False, na=False)])
+    atrasadas = len(df[df[col_map['status']].astype(str).str.contains("atrasado|late|delay|pendente", case=False, na=False)])
     total = len(df)
-    saude = round(100 - (atrasadas / total * 100), 1) if total > 0 else 0
+    saude = round(100 - (atrasadas / total * 100) if total > 0 else 0, 1)
     
     # KPIs
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total de Tarefas", total, help="Quantidade total de atividades")
-    col2.metric("Caminho Crítico", len(cp['caminho']), help="Tarefas que não podem atrasar")
+    col1.metric("Total de Tarefas", total)
+    col2.metric("Caminho Crítico", len(cp['caminho']))
     col3.metric("Tarefas Atrasadas", atrasadas, delta=f"-{atrasadas}", delta_color="inverse")
     col4.metric("Saúde do Projeto", f"{saude}%", delta=f"{saude-80:+.1f}%")
     
-    # Gráficos lado a lado
+    # Gráficos
     c1, c2 = st.columns([3, 2])
     with c1:
         st.subheader("Diagrama de Gantt")
@@ -183,7 +204,7 @@ def gerar_dashboard(df, col_map):
         fig_bar.update_layout(template="plotly_dark", height=420)
         st.plotly_chart(fig_bar, use_container_width=True)
     
-    # Caminho crítico em lista
+    # Caminho crítico
     st.subheader("Caminho Crítico")
     if cp['caminho']:
         st.code("\n".join(cp['caminho']), language="text")
@@ -192,8 +213,9 @@ def gerar_dashboard(df, col_map):
 
 # ====================== SIDEBAR ======================
 with st.sidebar:
-    st.markdown("# GPlan IA 4.0")
-    st.caption("Gestão de Projetos • BI Automático")
+    st.markdown('<div class="header-icon">🧠</div>', unsafe_allow_html=True)
+    st.markdown('<h2 class="header-title">GPlan IA</h2>', unsafe_allow_html=True)
+    st.caption("Gestão Inteligente de Projetos")
     
     uploaded = st.file_uploader("Upload Cronograma", type=["xlsx", "xls", "csv"])
     
@@ -201,35 +223,58 @@ with st.sidebar:
         try:
             df = pd.read_excel(uploaded) if uploaded.name.lower().endswith(('.xlsx','.xls')) else pd.read_csv(uploaded)
             st.session_state.df = df
-            st.success("✅ Cronograma carregado")
+            st.success("✅ Carregado")
             
-            st.subheader("Mapeamento de Colunas")
+            st.subheader("Mapeamento")
             cols = list(df.columns)
             st.session_state.column_map = {
                 'tarefa': st.selectbox("Tarefa", cols, index=next((i for i,c in enumerate(cols) if 'tarefa' in c.lower() or 'nome' in c.lower()), 0)),
-                'inicio': st.selectbox("Data Início", cols, index=next((i for i,c in enumerate(cols) if any(k in c.lower() for k in ['início','inicio','start'])), 0)),
-                'fim': st.selectbox("Data Fim", cols, index=next((i for i,c in enumerate(cols) if any(k in c.lower() for k in ['fim','end','término'])), 0)),
+                'inicio': st.selectbox("Início", cols, index=next((i for i,c in enumerate(cols) if any(k in c.lower() for k in ['início','inicio','start'])), 0)),
+                'fim': st.selectbox("Fim", cols, index=next((i for i,c in enumerate(cols) if any(k in c.lower() for k in ['fim','end','término'])), 0)),
                 'status': st.selectbox("Status", cols, index=next((i for i,c in enumerate(cols) if 'status' in c.lower() or 'situação' in c.lower()), 0)),
                 'responsavel': st.selectbox("Responsável", cols, index=next((i for i,c in enumerate(cols) if any(k in c.lower() for k in ['respons','dono','owner'])), 0)),
-                'predecessores': st.selectbox("Predecessores (opcional)", [""] + cols),
+                'predecessores': st.selectbox("Predecessores", [""] + cols),
             }
             st.session_state.project_name = st.text_input("Nome do Projeto", value=st.session_state.project_name)
         except Exception as e:
-            st.error(f"Erro ao ler arquivo: {e}")
+            st.error(f"Erro: {e}")
+    
+    if st.session_state.df is not None:
+        st.markdown("### Ações Rápidas")
+        st.markdown('<div class="action-buttons">', unsafe_allow_html=True)
+        
+        if st.button("🚨 Análise de Riscos"):
+            st.session_state.messages.append({"role": "user", "content": "Faça uma análise completa e detalhada de riscos do projeto atual, incluindo tarefas críticas, sobrecarga de recursos e recomendações."})
+            st.rerun()
+        
+        if st.button("📊 Relatório de Métricas"):
+            st.session_state.messages.append({"role": "user", "content": "Gere um relatório executivo completo com métricas-chave, saúde do projeto, caminho crítico e sugestões de melhoria."})
+            st.rerun()
+        
+        if st.button("📋 Plano de Recuperação 5W2H"):
+            st.session_state.messages.append({"role": "user", "content": "Monte um plano de ação 5W2H detalhado para recuperar as tarefas atrasadas e críticas do caminho crítico."})
+            st.rerun()
+        
+        if st.button("📈 Resumo Executivo"):
+            st.session_state.messages.append({"role": "user", "content": "Crie um resumo executivo profissional para apresentação à diretoria, incluindo status atual, riscos principais e próximas ações."})
+            st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # ====================== MAIN AREA ======================
-st.title(f"GPlan IA 4.0 — {st.session_state.project_name}")
+st.markdown('<div class="header-icon">🧠</div>', unsafe_allow_html=True)
+st.markdown(f'<h1 class="header-title">GPlan IA 4.0 — {st.session_state.project_name}</h1>', unsafe_allow_html=True)
 
 if st.session_state.df is not None:
-    st.markdown("### Dashboard de Análise Automática")
+    st.markdown("### Dashboard Automático de Análise")
     gerar_dashboard(st.session_state.df, st.session_state.column_map)
     
     st.divider()
     st.subheader("💬 Assistente Inteligente")
 else:
-    st.info("Faça upload do seu cronograma na barra lateral para ativar o BI automático e o assistente.")
+    st.info("Faça upload do seu cronograma para ativar o dashboard automático e o assistente.")
 
-# Chat limpo
+# Chat
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
@@ -241,7 +286,7 @@ if prompt := st.chat_input("Pergunte sobre o projeto..."):
     
     if gemini_model and st.session_state.df is not None:
         with st.chat_message("assistant"):
-            with st.spinner("Analisando com IA..."):
+            with st.spinner("Analisando..."):
                 try:
                     chat = gemini_model.start_chat(history=[
                         {"role": "user" if m["role"]=="user" else "model", "parts": [m["content"]]} 
@@ -256,6 +301,6 @@ if prompt := st.chat_input("Pergunte sobre o projeto..."):
                 except Exception as e:
                     st.error(f"Erro: {str(e)}")
     else:
-        st.warning("Carregue um cronograma primeiro para usar o assistente.")
+        st.warning("Carregue um cronograma para usar o assistente.")
 
-st.caption("GPlan IA 4.0 • Design Premium Minimalista • BI Automático • Gemini 2.5 Flash")
+st.caption("GPlan IA 4.0 • Design Premium • BI Automático • Gemini 2.5 Flash • 2026")
