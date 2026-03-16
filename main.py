@@ -1,7 +1,7 @@
 """
-GPlan IA 2.0 — Copiloto Master de Gestão de Projetos
-Uma ferramenta profissional de IA para gestão de projetos com interface premium,
-análise avançada e capacidades de tool use para ações executáveis.
+GPlan IA 3.0 — Copiloto Master de Gestão de Projetos
+Uma plataforma profissional de IA para análise inteligente de cronogramas
+Versão Streamlit Completa (Arquivo Único)
 """
 
 import streamlit as st
@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from openai import OpenAI
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 import numpy as np
 from typing import Any, Dict, List, Optional
 import warnings
@@ -22,15 +22,10 @@ warnings.filterwarnings("ignore")
 # ============================================================================
 
 st.set_page_config(
-    page_title="GPlan IA 2.0 — Master Intelligence",
+    page_title="GPlan IA 3.0 — Master Intelligence",
     page_icon="🧠",
     layout="wide",
     initial_sidebar_state="expanded",
-    menu_items={
-        "Get Help": "https://github.com",
-        "Report a bug": "https://github.com",
-        "About": "GPlan IA 2.0 — Copiloto Master de Gestão de Projetos"
-    }
 )
 
 # ============================================================================
@@ -69,10 +64,6 @@ PREMIUM_CSS = f"""
         border-right: 2px solid {THEME_COLORS['border']};
     }}
     
-    [data-testid="stSidebarNav"] {{
-        padding: 1rem 0;
-    }}
-    
     .stButton > button {{
         width: 100%;
         background: linear-gradient(135deg, {THEME_COLORS['primary']} 0%, {THEME_COLORS['secondary']} 100%);
@@ -91,10 +82,6 @@ PREMIUM_CSS = f"""
     .stButton > button:hover {{
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(0, 217, 255, 0.5);
-    }}
-    
-    .stButton > button:active {{
-        transform: translateY(0);
     }}
     
     .stMetric {{
@@ -214,16 +201,6 @@ PREMIUM_CSS = f"""
         padding-bottom: 12px;
         border-bottom: 2px solid {THEME_COLORS['border']};
     }}
-    
-    .loading-spinner {{
-        display: inline-block;
-        animation: spin 1s linear infinite;
-    }}
-    
-    @keyframes spin {{
-        0% {{ transform: rotate(0deg); }}
-        100% {{ transform: rotate(360deg); }}
-    }}
 </style>
 """
 
@@ -243,19 +220,17 @@ def init_openai_client():
         return OpenAI(api_key=api_key)
     except Exception as e:
         st.error(f"❌ Erro ao inicializar OpenAI: {str(e)}")
-        st.stop()
+        st.info("Configure sua chave da OpenAI em Settings → Secrets")
+        return None
 
 client = init_openai_client()
 
 # ============================================================================
-# FERRAMENTAS (TOOL USE) - FUNÇÕES QUE A IA PODE CHAMAR
+# FUNÇÕES DE ANÁLISE (TOOL USE)
 # ============================================================================
 
 def analisar_riscos(df: pd.DataFrame) -> Dict[str, Any]:
-    """
-    Analisa riscos no cronograma do projeto.
-    Retorna uma análise estruturada de riscos potenciais.
-    """
+    """Analisa riscos no cronograma do projeto."""
     if df is None or df.empty:
         return {"erro": "Nenhum dado disponível para análise de riscos"}
     
@@ -306,9 +281,7 @@ def analisar_riscos(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
 def gerar_metricas_projeto(df: pd.DataFrame) -> Dict[str, Any]:
-    """
-    Gera métricas consolidadas do projeto.
-    """
+    """Gera métricas consolidadas do projeto."""
     if df is None or df.empty:
         return {"erro": "Nenhum dado disponível"}
     
@@ -337,67 +310,6 @@ def gerar_metricas_projeto(df: pd.DataFrame) -> Dict[str, Any]:
         "percentual_conclusao": round((concluidas / total_tarefas * 100), 2) if total_tarefas > 0 else 0
     }
 
-def gerar_plano_5w2h(tarefas_atrasadas: List[str]) -> Dict[str, Any]:
-    """
-    Gera um plano 5W2H para tarefas atrasadas.
-    """
-    if not tarefas_atrasadas:
-        return {"erro": "Nenhuma tarefa atrasada para planejar"}
-    
-    return {
-        "framework": "5W2H",
-        "tarefas_cobertas": len(tarefas_atrasadas),
-        "componentes": {
-            "What": "O que precisa ser feito para recuperar o atraso",
-            "Why": "Por que essas ações são necessárias",
-            "Who": "Quem é responsável por cada ação",
-            "When": "Quando cada ação será executada",
-            "Where": "Onde os recursos serão alocados",
-            "How": "Como as ações serão implementadas",
-            "How Much": "Quanto de recursos (tempo, custo) será necessário"
-        },
-        "status": "Pronto para detalhamento pela IA"
-    }
-
-def criar_resumo_executivo(df: pd.DataFrame, foco: str = "geral") -> Dict[str, Any]:
-    """
-    Cria um resumo executivo do projeto.
-    """
-    if df is None or df.empty:
-        return {"erro": "Nenhum dado disponível"}
-    
-    metricas = gerar_metricas_projeto(df)
-    riscos = analisar_riscos(df)
-    
-    return {
-        "tipo": "Resumo Executivo",
-        "data_geracao": datetime.now().isoformat(),
-        "foco": foco,
-        "metricas_chave": metricas,
-        "riscos_principais": riscos.get("riscos", [])[:3],
-        "recomendacoes": "Serão geradas pela IA com base nos dados"
-    }
-
-# Dicionário de ferramentas disponíveis para a IA
-TOOLS_AVAILABLE = {
-    "analisar_riscos": {
-        "description": "Analisa riscos no cronograma do projeto baseado nos dados",
-        "function": analisar_riscos
-    },
-    "gerar_metricas_projeto": {
-        "description": "Gera métricas consolidadas do projeto (saúde, conclusão, etc)",
-        "function": gerar_metricas_projeto
-    },
-    "gerar_plano_5w2h": {
-        "description": "Gera um plano 5W2H para tarefas atrasadas",
-        "function": gerar_plano_5w2h
-    },
-    "criar_resumo_executivo": {
-        "description": "Cria um resumo executivo do projeto",
-        "function": criar_resumo_executivo
-    }
-}
-
 # ============================================================================
 # ESTADO DA SESSÃO
 # ============================================================================
@@ -406,7 +318,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = [
         {
             "role": "assistant",
-            "content": "🧠 **Olá! Sou o GPlan IA 2.0**, seu copiloto master de gestão de projetos.\n\n"
+            "content": "🧠 **Olá! Sou o GPlan IA 3.0**, seu copiloto master de gestão de projetos.\n\n"
                       "Estou equipado com capacidades avançadas de análise, previsão e planejamento. "
                       "Posso ajudá-lo com:\n\n"
                       "✨ **Análise de Riscos** — Identificar desvios e ameaças ao cronograma\n"
@@ -420,9 +332,6 @@ if "messages" not in st.session_state:
 if "df" not in st.session_state:
     st.session_state.df = None
 
-if "tool_results" not in st.session_state:
-    st.session_state.tool_results = {}
-
 # ============================================================================
 # SIDEBAR - CONTROLES E CONFIGURAÇÃO
 # ============================================================================
@@ -431,7 +340,7 @@ with st.sidebar:
     st.markdown("""
     <div style="text-align: center; padding: 20px 0;">
         <h1 style="font-size: 28px; margin: 0;">🧠</h1>
-        <h2 style="font-size: 18px; margin: 8px 0; color: #00D9FF;">GPlan IA 2.0</h2>
+        <h2 style="font-size: 18px; margin: 8px 0; color: #00D9FF;">GPlan IA 3.0</h2>
         <p style="font-size: 12px; color: #CBD5E1; margin: 0;">Master Intelligence</p>
     </div>
     """, unsafe_allow_html=True)
@@ -471,7 +380,7 @@ with st.sidebar:
         if st.button("🚨 Análise de\nRiscos", use_container_width=True, key="btn_riscos"):
             st.session_state.messages.append({
                 "role": "user",
-                "content": "Faça uma análise rigorosa de riscos baseada nos dados atuais do projeto. Use a ferramenta de análise de riscos e me dê um relatório detalhado."
+                "content": "Faça uma análise rigorosa de riscos baseada nos dados atuais do projeto. Me dê um relatório detalhado dos principais riscos identificados."
             })
             st.rerun()
     
@@ -479,7 +388,7 @@ with st.sidebar:
         if st.button("📊 Métricas do\nProjeto", use_container_width=True, key="btn_metricas"):
             st.session_state.messages.append({
                 "role": "user",
-                "content": "Gere um relatório completo de métricas do projeto. Use a ferramenta de métricas e me mostre a saúde geral, progresso e status de todas as tarefas."
+                "content": "Gere um relatório completo de métricas do projeto. Me mostre a saúde geral, progresso e status de todas as tarefas."
             })
             st.rerun()
     
@@ -489,7 +398,7 @@ with st.sidebar:
         if st.button("📋 Plano 5W2H", use_container_width=True, key="btn_5w2h"):
             st.session_state.messages.append({
                 "role": "user",
-                "content": "Gere um plano de ação 5W2H para as tarefas atrasadas. Use a ferramenta apropriada e detalhe cada componente (What, Why, Who, When, Where, How, How Much)."
+                "content": "Gere um plano de ação 5W2H para as tarefas atrasadas. Detalhe cada componente (What, Why, Who, When, Where, How, How Much)."
             })
             st.rerun()
     
@@ -497,7 +406,7 @@ with st.sidebar:
         if st.button("📈 Resumo\nExecutivo", use_container_width=True, key="btn_resumo"):
             st.session_state.messages.append({
                 "role": "user",
-                "content": "Crie um resumo executivo profissional para apresentar à diretoria. Use a ferramenta de resumo executivo e inclua métricas-chave, riscos principais e recomendações."
+                "content": "Crie um resumo executivo profissional para apresentar à diretoria. Inclua métricas-chave, riscos principais e recomendações."
             })
             st.rerun()
     
@@ -527,7 +436,7 @@ with st.sidebar:
 st.markdown("""
 <div style="text-align: center; margin: 20px 0;">
     <h1 style="font-size: 32px; margin: 0; background: linear-gradient(135deg, #00D9FF, #7C3AED); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-        🧠 GPlan IA 2.0
+        🧠 GPlan IA 3.0
     </h1>
     <p style="color: #CBD5E1; margin: 8px 0;">Copiloto Master de Gestão de Projetos</p>
 </div>
@@ -635,7 +544,7 @@ if st.session_state.df is not None:
     st.divider()
 
 # ============================================================================
-# ÁREA DE CHAT COM SUPORTE A TOOL USE
+# ÁREA DE CHAT COM IA
 # ============================================================================
 
 st.markdown('<div class="section-title">💬 Assistente Inteligente</div>', unsafe_allow_html=True)
@@ -660,6 +569,8 @@ if prompt := st.chat_input("Como posso ajudar no seu planejamento agora?", key="
     if st.session_state.df is not None:
         df = st.session_state.df
         metricas = gerar_metricas_projeto(df)
+        riscos = analisar_riscos(df)
+        
         contexto_dados = f"""
 DADOS ATUAIS DO PROJETO:
 - Total de Tarefas: {metricas['total_tarefas']}
@@ -667,6 +578,9 @@ DADOS ATUAIS DO PROJETO:
 - Em Progresso: {metricas['em_progresso']}
 - Atrasadas: {metricas['atrasadas']}
 - Saúde do Projeto: {metricas['saude_projeto']:.1f}%
+
+RISCOS IDENTIFICADOS: {riscos['total_riscos']}
+{json.dumps(riscos['riscos'], ensure_ascii=False, indent=2)}
 
 Primeiras 50 linhas dos dados:
 {df.head(50).to_string()}
@@ -676,26 +590,19 @@ Primeiras 50 linhas dos dados:
     
     # System prompt aprimorado
     SYSTEM_PROMPT = f"""
-Você é o GPlan IA 2.0, o mais avançado copiloto de gestão de projetos com capacidades de análise profunda e ação executável.
+Você é o GPlan IA 3.0, o mais avançado copiloto de gestão de projetos com capacidades de análise profunda e ação executável.
 
 PERSONALIDADE: Consultor Sênior experiente, assertivo, analítico, focado em resultados e impacto estratégico.
 
 BASE DE CONHECIMENTO: PMBOK 7, Scrum Guide 2020, Kanban, Lean, e melhores práticas de gestão de projetos.
 
-CAPACIDADES ESPECIAIS: Você tem acesso a ferramentas que pode chamar para executar ações específicas:
-- analisar_riscos: Analisa riscos no cronograma
-- gerar_metricas_projeto: Gera métricas consolidadas
-- gerar_plano_5w2h: Cria planos de ação estruturados
-- criar_resumo_executivo: Gera resumos para diretoria
-
 INSTRUÇÕES:
-1. Se o usuário pedir análise de riscos, use a ferramenta analisar_riscos
-2. Se o usuário pedir métricas ou saúde do projeto, use gerar_metricas_projeto
-3. Se o usuário pedir plano 5W2H ou ação para tarefas atrasadas, use gerar_plano_5w2h
-4. Se o usuário pedir resumo executivo, use criar_resumo_executivo
-5. Sempre que possível, use as ferramentas para fornecer análises quantitativas e estruturadas
-6. Formule respostas em Markdown com tabelas, listas e estrutura clara
-7. Seja proativo em sugerir ações baseadas nos dados
+1. Analise os dados do projeto fornecidos abaixo
+2. Forneça insights quantitativos e estruturados
+3. Sempre que possível, use tabelas Markdown para organizar informações
+4. Seja proativo em sugerir ações baseadas nos dados
+5. Formule respostas em Markdown com estrutura clara
+6. Responda em português brasileiro
 
 CONTEXTO DOS DADOS:
 {contexto_dados}
@@ -704,20 +611,23 @@ CONTEXTO DOS DADOS:
     with st.chat_message("assistant"):
         with st.spinner("🧠 GPlan processando estratégia..."):
             try:
-                # Fazer chamada à API com suporte a tool use
-                response = client.chat.completions.create(
-                    model=modelo,
-                    messages=[
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        *st.session_state.messages
-                    ],
-                    temperature=temperatura,
-                    max_tokens=2000
-                )
-                
-                texto_resposta = response.choices[0].message.content
-                st.markdown(texto_resposta)
-                st.session_state.messages.append({"role": "assistant", "content": texto_resposta})
+                if not client:
+                    st.error("❌ Cliente OpenAI não inicializado. Configure sua chave da API.")
+                else:
+                    # Fazer chamada à API
+                    response = client.chat.completions.create(
+                        model=modelo,
+                        messages=[
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            *st.session_state.messages
+                        ],
+                        temperature=temperatura,
+                        max_tokens=2000
+                    )
+                    
+                    texto_resposta = response.choices[0].message.content
+                    st.markdown(texto_resposta)
+                    st.session_state.messages.append({"role": "assistant", "content": texto_resposta})
             
             except Exception as e:
                 erro_msg = f"❌ Erro ao processar: {str(e)}"
@@ -732,7 +642,7 @@ st.divider()
 
 st.markdown("""
 <div style="text-align: center; padding: 20px; color: #CBD5E1; font-size: 12px;">
-    <p>GPlan IA 2.0 — Copiloto Master de Gestão de Projetos</p>
+    <p>GPlan IA 3.0 — Copiloto Master de Gestão de Projetos</p>
     <p>Desenvolvido com IA avançada, análise de dados e engenharia de software profissional</p>
     <p style="margin-top: 10px; color: #64748B;">© 2024 | Todos os direitos reservados</p>
 </div>
