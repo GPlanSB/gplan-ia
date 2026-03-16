@@ -1,6 +1,6 @@
 """
 GPlan IA 4.0 — Enterprise Edition (Gemini 2.5 Flash)
-Corrigido Gantt (DateParseError) + Ícone Profissional SVG + Botões Funcionais
+Gantt corrigido com parsing robusto de datas + Ícone Profissional SVG
 """
 
 import streamlit as st
@@ -19,7 +19,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ====================== VISUAL PREMIUM MINIMALISTA ======================
+# ====================== VISUAL PREMIUM ======================
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -78,7 +78,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Ícone SVG profissional (cérebro + circuito abstrato tech, estilo corporativo)
+# Ícone SVG profissional tech (cérebro abstrato + circuito, sem carinha)
 PROFESSIONAL_ICON_SVG = """
 <svg class="header-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -87,12 +87,9 @@ PROFESSIONAL_ICON_SVG = """
       <stop offset="100%" stop-color="#3b82f6"/>
     </linearGradient>
   </defs>
-  <!-- Estrutura principal (círculo tech) -->
   <circle cx="50" cy="50" r="38" fill="none" stroke="url(#grad)" stroke-width="5"/>
-  <!-- Linhas de circuito/cérebro abstrato -->
   <path d="M35 40 Q50 25 65 40 M35 60 Q50 75 65 60" stroke="url(#grad)" stroke-width="4" fill="none"/>
   <path d="M30 50 Q50 40 70 50 Q50 60 30 50" stroke="#60a5fa" stroke-width="3" fill="none" opacity="0.8"/>
-  <!-- Ponto central (foco/olho abstrato) -->
   <circle cx="50" cy="50" r="8" fill="#1f2937" stroke="#60a5fa" stroke-width="2"/>
 </svg>
 """
@@ -140,26 +137,42 @@ def gerar_gantt(df, col_map):
     end_col = col_map.get('fim')
     
     if start_col not in df.columns or end_col not in df.columns:
-        st.warning("Colunas de início/fim não encontradas no mapeamento.")
+        st.warning("Colunas de início ou fim não encontradas no mapeamento.")
         return None
     
     dfg = df.copy()
     
-    # Tratamento robusto: tenta vários formatos comuns (BR e US)
+    # Tentativa 1: parsing automático com dayfirst (prioridade BR)
     dfg['Start'] = pd.to_datetime(dfg[start_col], errors='coerce', dayfirst=True)
     dfg['Finish'] = pd.to_datetime(dfg[end_col], errors='coerce', dayfirst=True)
     
-    # Se ainda falhar, tenta format explícito (ex: dd/mm/yyyy)
-    if dfg['Start'].isna().all():
-        dfg['Start'] = pd.to_datetime(dfg[start_col], format='%d/%m/%Y', errors='coerce')
-    if dfg['Finish'].isna().all():
-        dfg['Finish'] = pd.to_datetime(dfg[end_col], format='%d/%m/%Y', errors='coerce')
+    # Tentativa 2: format explícito dd/mm/yyyy
+    mask_start_invalid = dfg['Start'].isna()
+    mask_end_invalid = dfg['Finish'].isna()
+    if mask_start_invalid.any():
+        dfg.loc[mask_start_invalid, 'Start'] = pd.to_datetime(dfg.loc[mask_start_invalid, start_col], format='%d/%m/%Y', errors='coerce')
+    if mask_end_invalid.any():
+        dfg.loc[mask_end_invalid, 'Finish'] = pd.to_datetime(dfg.loc[mask_end_invalid, end_col], format='%d/%m/%Y', errors='coerce')
     
-    # Remove linhas inválidas
+    # Tentativa 3: formato americano m/d/y (fallback)
+    mask_start_invalid = dfg['Start'].isna()
+    mask_end_invalid = dfg['Finish'].isna()
+    if mask_start_invalid.any():
+        dfg.loc[mask_start_invalid, 'Start'] = pd.to_datetime(dfg.loc[mask_start_invalid, start_col], format='%m/%d/%Y', errors='coerce')
+    if mask_end_invalid.any():
+        dfg.loc[mask_end_invalid, 'Finish'] = pd.to_datetime(dfg.loc[mask_end_invalid, end_col], format='%m/%d/%Y', errors='coerce')
+    
+    # Remove linhas sem datas válidas
     dfg = dfg.dropna(subset=['Start', 'Finish'])
     
     if dfg.empty:
-        st.warning("Nenhuma data válida encontrada nas colunas selecionadas para início e fim.")
+        st.warning("""
+        Nenhuma data válida encontrada nas colunas selecionadas.
+        Verifique:
+        • Formato deve ser dd/mm/aaaa (ex: 15/06/2025) ou mm/dd/yyyy
+        • Sem textos como 'Pendente', 'N/A' ou células vazias nessas colunas
+        • Selecione novamente as colunas corretas no mapeamento
+        """)
         return None
     
     fig = px.timeline(dfg, x_start="Start", x_end="Finish", y=col_map['tarefa'],
@@ -194,7 +207,7 @@ def gerar_dashboard(df, col_map):
         if fig:
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Gantt não gerado (verifique se as colunas de datas estão corretas e têm formato válido como dd/mm/aaaa)")
+            st.info("Gantt não gerado — verifique colunas de datas")
     
     with c2:
         st.subheader("Distribuição de Status")
