@@ -3,142 +3,145 @@ import pandas as pd
 import plotly.express as px
 from openai import OpenAI
 
-client = OpenAI()
-
+# Configuração de Elite
 st.set_page_config(
-    page_title="GPlan IA",
-    page_icon="🚀",
-    layout="wide"
+    page_title="GPlan IA — Master Intelligence",
+    page_icon="🧠",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-st.title("🚀 GPlan IA — Copiloto de Gerenciamento de Projetos")
+# Estilização CSS para visual "Premium Dark Mode"
+st.markdown("""
+    <style>
+    .main { background-color: #0e1117; }
+    .stChatMessage { border-radius: 10px; margin-bottom: 10px; border: 1px solid #30363d; }
+    .stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
+    [data-testid="stSidebar"] { background-color: #161b22; border-right: 1px solid #30363d; }
+    .stButton>button { width: 100%; border-radius: 5px; background-color: #238636; color: white; border: none; }
+    </style>
+    """, unsafe_allow_html=True)
 
-st.sidebar.header("Importar dados")
+# Inicialização do Cliente OpenAI (Puxando dos Secrets do Streamlit)
+try:
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+except:
+    st.error("Erro: OpenAI API Key não configurada nos Secrets.")
+    st.stop()
 
-file = st.sidebar.file_uploader(
-    "Envie sua planilha",
-    type=["xlsx","csv"]
-)
+# --- ESTADO DA SESSÃO ---
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "assistant", "content": "Olá, sou o **GPlan IA**. Estou pronto para otimizar seus projetos. Como posso ajudar hoje?"}
+    ]
+if "df" not in st.session_state:
+    st.session_state.df = None
 
-# ---------------------------
-# LEITURA DOS DADOS
-# ---------------------------
-
-if file:
-
-    if file.name.endswith(".csv"):
-        df = pd.read_csv(file)
-    else:
-        df = pd.read_excel(file)
-
-    st.success("Dados carregados!")
-
-    st.subheader("📊 Dashboard do Projeto")
-
-    total = len(df)
-
-    atrasadas = 0
-    if "Status" in df.columns:
-        atrasadas = len(df[df["Status"]=="Atrasado"])
-
-    progresso = ((total - atrasadas) / total) * 100 if total else 0
-
-    c1,c2,c3 = st.columns(3)
-
-    c1.metric("Total de Tarefas", total)
-    c2.metric("Atrasadas", atrasadas)
-    c3.metric("Saúde do Projeto", f"{progresso:.1f}%")
-
-    # gráfico
-
-    if "Status" in df.columns:
-
-        fig = px.pie(
-            df,
-            names="Status",
-            title="Distribuição de Status"
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
+# --- SIDEBAR (CONTROLES) ---
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/1087/1087815.png", width=80)
+    st.title("GPlan Control")
+    st.divider()
+    
+    st.subheader("📁 Ingestão de Dados")
+    uploaded_file = st.file_uploader("Upload de Cronograma (Excel/CSV)", type=["xlsx", "csv"])
+    
+    if uploaded_file:
+        if uploaded_file.name.endswith(".csv"):
+            st.session_state.df = pd.read_csv(uploaded_file)
+        else:
+            st.session_state.df = pd.read_excel(uploaded_file)
+        st.success("Base de dados integrada!")
 
     st.divider()
+    st.subheader("⚡ Comandos Rápidos")
+    if st.button("🚨 Análise de Riscos"):
+        st.session_state.messages.append({"role": "user", "content": "Faça uma análise rigorosa de riscos baseada nos dados atuais."})
+    if st.button("📋 Plano de Ação 5W2H"):
+        st.session_state.messages.append({"role": "user", "content": "Gere um plano de ação 5W2H para as tarefas atrasadas."})
+    if st.button("📊 Resumo Executivo"):
+        st.session_state.messages.append({"role": "user", "content": "Crie um resumo executivo para diretoria."})
 
-    # ---------------------------
-    # CHAT IA
-    # ---------------------------
+# --- LAYOUT PRINCIPAL ---
+st.title("🧠 GPlan IA — Copiloto Master")
 
-    st.subheader("🧠 Converse com o GPlan IA")
+# Se houver dados, mostra o Dashboard de BI antes do Chat
+if st.session_state.df is not None:
+    df = st.session_state.df
+    st.subheader("📊 Dashboard de Performance")
+    
+    # Cálculos PMBOK/Scrum
+    total = len(df)
+    # Tenta encontrar colunas comuns de status
+    status_col = next((c for c in df.columns if 'status' in c.lower()), None)
+    
+    atrasadas = len(df[df[status_col].str.contains("Atrasado|Atraso|Late", case=False)]) if status_col else 0
+    saude = ((total - atrasadas) / total) * 100 if total > 0 else 0
+    
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total de Tarefas", total)
+    m2.metric("Tarefas Atrasadas", atrasadas, delta=f"{atrasadas/total*100:.1f}%" if total > 0 else 0, delta_color="inverse")
+    m3.metric("Saúde do Projeto", f"{saude:.1f}%")
+    m4.metric("Metodologia", "Híbrida (Scrum/PMI)")
 
-    SYSTEM_PROMPT = """
-Você é o GPlan IA, um especialista em Gerenciamento de Projetos.
+    col_chart1, col_chart2 = st.columns(2)
+    with col_chart1:
+        if status_col:
+            fig_pie = px.pie(df, names=status_col, title="Distribuição de Status", hole=.4, template="plotly_dark")
+            st.plotly_chart(fig_pie, use_container_width=True)
+    with col_chart2:
+        # Gráfico de barras simples por responsável ou categoria se existir
+        resp_col = next((c for c in df.columns if 'respons' in c.lower() or 'dono' in c.lower()), None)
+        if resp_col:
+            fig_bar = px.bar(df[resp_col].value_counts(), title="Carga por Responsável", template="plotly_dark")
+            st.plotly_chart(fig_bar, use_container_width=True)
 
-Você domina:
+st.divider()
 
-PMBOK
-Scrum
-Kanban
-Lean Project Management
-Gestão de riscos
-Gestão de cronograma
-Gestão de recursos
+# --- ÁREA DE CHAT (INTERATIVA) ---
+# Container para o histórico de chat para não perder o scroll
+chat_container = st.container()
 
-Seu papel é ajudar o gerente do projeto a tomar decisões.
-
-Sempre:
-
-analise os dados do projeto
-identifique riscos
-detecte gargalos
-sugira planos de ação
-responda como um consultor estratégico
-
-Nunca responda superficialmente.
-"""
-
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
+with chat_container:
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
-            st.write(msg["content"])
+            st.markdown(msg["content"])
 
-    if prompt := st.chat_input("Pergunte qualquer coisa sobre o projeto"):
+# Input de Chat
+if prompt := st.chat_input("Como posso ajudar no seu planejamento agora?"):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-        st.session_state.messages.append(
-            {"role":"user","content":prompt}
-        )
+    # Contexto Inteligente
+    contexto_dados = ""
+    if st.session_state.df is not None:
+        contexto_dados = f"DADOS ATUAIS DO PROJETO (Primeiras 50 linhas):\n{st.session_state.df.head(50).to_string()}"
+    else:
+        contexto_dados = "Nenhuma planilha subida ainda. Responda com base em teoria geral de PMBOK/Scrum."
 
-        with st.chat_message("user"):
-            st.write(prompt)
+    SYSTEM_PROMPT = f"""
+    Você é o GPlan IA, o mais avançado copiloto de gestão de projetos.
+    Personalidade: Consultor Sênior, assertivo, analítico e focado em resultados.
+    Base de Conhecimento: PMBOK 7, Scrum Guide 2020, Kanban e Lean.
+    Instrução: Se houver dados abaixo, use-os para dar respostas quantitativas. Se não, dê orientações estratégicas.
+    
+    {contexto_dados}
+    """
 
-        # contexto dos dados
-        contexto = df.head(50).to_string()
-
-        pergunta = f"""
-Dados do projeto:
-
-{contexto}
-
-Pergunta do gerente:
-
-{prompt}
-
-Analise os dados e responda.
-"""
-
-        resposta = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role":"system","content":SYSTEM_PROMPT},
-                {"role":"user","content":pergunta}
-            ]
-        )
-
-        texto = resposta.choices[0].message.content
-
-        with st.chat_message("assistant"):
-            st.write(texto)
-
-        st.session_state.messages.append(
-            {"role":"assistant","content":texto}
-        )
+    with st.chat_message("assistant"):
+        with st.spinner("GPlan processando estratégia..."):
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o", # Mudado para GPT-4o original para máxima inteligência
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        *st.session_state.messages
+                    ],
+                    temperature=0.7
+                )
+                texto_resposta = response.choices[0].message.content
+                st.markdown(texto_resposta)
+                st.session_state.messages.append({"role": "assistant", "content": texto_resposta})
+            except Exception as e:
+                st.error(f"Erro na IA: {str(e)}")
