@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import google.generativeai as genai
-
 # Configuração Master
 st.set_page_config(page_title="GPlan IA Master", page_icon="🧠", layout="wide")
 
